@@ -1,0 +1,3 @@
+[submodule "authService"]
+	path = authService
+	url = https://github.com/yawgag/authService
