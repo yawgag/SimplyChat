@@ -1,22 +1,15 @@
 package main
 
 import (
-	"apiGateway/config"
-	"fmt"
+	"apiGateway/internal/app"
 	"log"
-	"net/http"
 )
 
 func main() {
-	cfg, err := config.LoadConfig()
+	app, err := app.NewApp()
 	if err != nil {
-		log.Fatal("can't load config: ", err)
+		log.Fatal(err)
 	}
 
-	// server := http.Server{
-	// 	Addr: cfg.GatewayAddr,
-	// }
-	fmt.Println("asd")
-	http.ListenAndServe(cfg.GatewayAddr, nil)
-	fmt.Println("asd")
+	app.Run()
 }
