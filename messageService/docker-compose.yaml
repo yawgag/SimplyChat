@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  message-service:
+    build: .
+    container_name: message_service
+    ports:
+      - "8081:8081"
+    environment:
+      - SERVER_ADDRESS=:8081
+      - REDIS_ADDR=redis:6379
+      - DB_URL=postgres://user:password@db:5432/messageDb
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    container_name: message_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: messageDb
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d messageDb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: message_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
