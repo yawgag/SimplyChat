@@ -9,9 +9,11 @@ import (
 	"messageService/internal/storage/memoryStorage/clientStorage"
 	"messageService/internal/storage/postgres"
 	"messageService/internal/storage/postgres/messageStorage"
-	"messageService/internal/storage/redis/statusStorage"
+	"messageService/internal/storage/redis/chatMembersStorage"
 	"messageService/internal/transport"
 	"net/http"
+
+	_ "net/http/pprof"
 
 	"github.com/gorilla/mux"
 )
@@ -34,14 +36,15 @@ func NewApp() (*App, error) {
 
 	clientStorageHandler := clientStorage.NewClientStorage()
 	messageStorageHandler := messageStorage.NewMessageStorage(dbConnPool)
-	statusStorageHandler, err := statusStorage.NewStatusStorage(context.Background(), cfg.RedisAddr)
+	chatMembersStorage, err := chatMembersStorage.NewChatMemberStorage(context.Background(), cfg.RedisAddr)
 	if err != nil {
 		return nil, fmt.Errorf("[NewApp] error: %s", err)
 	}
+	// statusStorageHandler, err := statusStorage.NewStatusStorage(context.Background(), cfg.RedisAddr)
 
-	messageServiceHandler := messageService.NewMessageHandler(clientStorageHandler, statusStorageHandler, messageStorageHandler)
+	messageServiceHandler := messageService.NewMessageHandler(clientStorageHandler, chatMembersStorage, messageStorageHandler)
 
-	wsHandler := transport.NewHandler(clientStorageHandler, statusStorageHandler, messageServiceHandler)
+	wsHandler := transport.NewHandler(clientStorageHandler, messageServiceHandler)
 
 	router := transport.NewServer(wsHandler).InitRouter()
 
@@ -52,7 +55,7 @@ func NewApp() (*App, error) {
 }
 
 func (a *App) Run() {
-	if err := http.ListenAndServe("0.0.0.0:8081", a.Router); err != nil {
+	if err := http.ListenAndServe("0.0.0.0:8081", a.Router); err != nil { // TODO: chat to cfg addr
 		log.Fatal(err)
 	}
 	fmt.Println("Run server")

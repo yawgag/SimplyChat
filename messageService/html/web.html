@@ -7,7 +7,7 @@
 <body>
   <h1>WebSocket Chat Tester</h1>
 
-  <label>User ID (uid): <input type="text" id="uid" value="123e4567-e89b-12d3-a456-426614174000"></label>
+  <label>Login: <input type="text" id="login" value="alice"></label>
   <button onclick="connect()">Подключиться</button>
   <button onclick="disconnect()">Отключиться</button>
   <br><br>
@@ -17,13 +17,13 @@
   <br><br>
 
   <label>Message: <input type="text" id="messageText" /></label>
-  <label>Recipient ID: <input type="text" id="recipientId" /></label>
+  <label>Recipient Login: <input type="text" id="recipientLogin" /></label>
   <button onclick="sendMessage()">Send Message</button>
   <br><br>
 
   <pre id="log" style="background: #eee; padding: 10px; height: 300px; overflow: auto;"></pre>
 
-    <script>
+  <script>
     let socket;
 
     function log(msg) {
@@ -33,13 +33,13 @@
     }
 
     function connect() {
-      const uid = document.getElementById("uid").value;
-      if (!uid) {
-        log("Введите UID перед подключением");
+      const login = document.getElementById("login").value;
+      if (!login) {
+        log("Введите login перед подключением");
         return;
       }
 
-      socket = new WebSocket("ws://localhost:8081/chat?uid=" + uid);
+      socket = new WebSocket("ws://localhost:8081/chat?login=" + encodeURIComponent(login));
 
       socket.onopen = () => log("WebSocket connection opened");
       socket.onmessage = (event) => log("Received: " + event.data);
@@ -56,18 +56,18 @@
     }
 
     function setActiveChat() {
-      const uid = document.getElementById("uid").value;
+      const login = document.getElementById("login").value;
       const chatId = parseInt(document.getElementById("chatId").value, 10);
 
-      if (!uid || !chatId) {
-        log("Введите UID и ChatID");
+      if (!login || !chatId) {
+        log("Введите login и ChatID");
         return;
       }
 
       const event = {
         eventType: "set_active_chat",
         data: {
-          uid: uid,
+          login: login,
           chat_id: chatId
         }
       };
@@ -77,12 +77,12 @@
     }
 
     function sendMessage() {
-      const uid = document.getElementById("uid").value;
+      const login = document.getElementById("login").value;
       const messageText = document.getElementById("messageText").value;
-      const recipientId = document.getElementById("recipientId").value;
+      const recipientLogin = document.getElementById("recipientLogin").value;
       const chatId = parseInt(document.getElementById("chatId").value, 10);
 
-      if (!uid || !messageText || !recipientId || !chatId) {
+      if (!login || !messageText || !recipientLogin || !chatId) {
         log("Введите все поля для отправки сообщения");
         return;
       }
@@ -90,17 +90,17 @@
       const event = {
         eventType: "send_message",
         data: {
-          sender_id: uid,
-          recipient_id: recipientId,
           chat_id: chatId,
-          content: messageText
+          sender_login: login,
+          recipient_login: recipientLogin,
+          content: messageText,
+          created_at: new Date().toISOString()
         }
       };
 
       socket.send(JSON.stringify(event));
       log("Sent send_message: " + JSON.stringify(event));
     }
-    </script>
-
+  </script>
 </body>
 </html>

@@ -8,31 +8,30 @@ import (
 	"messageService/internal/models"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
 type clientStorage struct {
-	storage map[uuid.UUID]*models.Client
+	storage map[string]*models.Client
 	mut     sync.RWMutex
 }
 
 func NewClientStorage() Handler {
 	return &clientStorage{
-		storage: make(map[uuid.UUID]*models.Client),
+		storage: make(map[string]*models.Client),
 	}
 }
 
 type Handler interface {
-	GetClient(uid uuid.UUID) (*models.Client, error)
-	SaveClient(uid uuid.UUID, conn *websocket.Conn, cancel context.CancelFunc)
-	DeleteClient(uid uuid.UUID)
+	GetClient(login string) (*models.Client, error)
+	SaveClient(login string, conn *websocket.Conn, cancel context.CancelFunc)
+	DeleteClient(login string)
 }
 
-func (c *clientStorage) SaveClient(uid uuid.UUID, conn *websocket.Conn, cancel context.CancelFunc) {
+func (c *clientStorage) SaveClient(login string, conn *websocket.Conn, cancel context.CancelFunc) {
 	c.mut.Lock()
-	c.storage[uid] = &models.Client{
-		Uid:           uid,
+	c.storage[login] = &models.Client{
+		Login:         login,
 		Conn:          conn,
 		Send:          make(chan json.RawMessage, 32),
 		CloseHandling: cancel,
@@ -40,21 +39,22 @@ func (c *clientStorage) SaveClient(uid uuid.UUID, conn *websocket.Conn, cancel c
 	c.mut.Unlock()
 }
 
-func (c *clientStorage) GetClient(uid uuid.UUID) (*models.Client, error) {
+func (c *clientStorage) GetClient(login string) (*models.Client, error) {
 	c.mut.RLock()
-	client, ok := c.storage[uid]
+	client, ok := c.storage[login]
 	c.mut.RUnlock()
+
 	if !ok {
 		return nil, fmt.Errorf("connection doesn't exist")
 	}
 	return client, nil
 }
 
-func (c *clientStorage) DeleteClient(uid uuid.UUID) {
+func (c *clientStorage) DeleteClient(login string) {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
-	client, ok := c.storage[uid]
+	client, ok := c.storage[login]
 	if !ok {
 		return
 	}
@@ -65,6 +65,6 @@ func (c *clientStorage) DeleteClient(uid uuid.UUID) {
 		log.Println("[DeleteClient] error: ", err)
 	}
 	close(client.Send)
-	delete(c.storage, uid)
+	delete(c.storage, login)
 
 }

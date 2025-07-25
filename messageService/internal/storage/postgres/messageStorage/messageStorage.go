@@ -1,27 +1,11 @@
 package messageStorage
 
-//
-//
-//
-//
-// TODO
-// this code has very bad logic, need to rewrite it later
-//
-// добавить нормализацию пользователей в чате.
-// добавить проверку, что переписка происходит именно между этими пользователями.
-//
-//
-//
-
 import (
 	"context"
 	"errors"
 	"fmt"
 	"messageService/internal/models"
 	"messageService/internal/storage/postgres"
-
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 var (
@@ -35,6 +19,10 @@ type messageHandler struct {
 type Handler interface {
 	SaveMessage(ctx context.Context, msg *models.EventSendMessagePayload) error
 	GetMessageHistory(ctx context.Context, startNum int, chatId int) ([]models.EventSendMessagePayload, error)
+	GetAllUserChats(ctx context.Context, login string) ([]models.EventChatPayload, error)
+	CreateChat(ctx context.Context, maxMembers int) (int, error)
+	AddUserToChat(ctx context.Context, chatId int, userLogin string) error
+	GetAllChatMembers(ctx context.Context, chatId int) ([]string, error)
 }
 
 func NewMessageStorage(pool postgres.DBPool) Handler {
@@ -44,67 +32,106 @@ func NewMessageStorage(pool postgres.DBPool) Handler {
 	return out
 }
 
-func (m *messageHandler) getChat(ctx context.Context, chatId int) (*models.Chat, error) {
-	query := `select id, userA, userB
-				from chat
-				where id = $1`
-
-	var chat models.Chat
-	err := m.pool.QueryRow(ctx, query, chatId).Scan(&chat.Id, &chat.UserAId, &chat.UserBId)
-
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, ErrorChatDoesntExist
-	}
-	if err != nil {
-		return nil, fmt.Errorf("[getChat] error: %s", err)
-	}
-	return &chat, nil
-}
-
-func (m *messageHandler) createChat(ctx context.Context, userAId, userBid uuid.UUID) (int, error) {
-	query := `insert into chat(userA, userb)
-				values($1, $2)
+func (m *messageHandler) CreateChat(ctx context.Context, maxMembers int) (int, error) {
+	query := `insert into chat(maxMembers)
+				values($1)
 				returning id`
 	var chatId int
-
-	err := m.pool.QueryRow(ctx, query, userAId, userBid).Scan(&chatId)
+	err := m.pool.QueryRow(ctx, query, maxMembers).Scan(&chatId)
 	if err != nil {
-		return -1, fmt.Errorf("[createChat] error: %s", err)
+		return -1, fmt.Errorf("[CreateChat] error: %s", err)
 	}
 
 	return chatId, nil
 }
 
-// TODO my eyes...
-func (m *messageHandler) SaveMessage(ctx context.Context, msg *models.EventSendMessagePayload) error {
-	tx, err := m.pool.Begin(ctx)
+func (m *messageHandler) GetAllChatMembers(ctx context.Context, chatId int) ([]string, error) {
+	query := `select userLogin
+				from chat_user
+				where chatId = $1`
+
+	rows, err := m.pool.Query(ctx, query, chatId)
 	if err != nil {
-		return fmt.Errorf("[SaveMessage] error: %s", err)
+		return nil, fmt.Errorf("[GetAllChatMembers] error: %s", err)
 	}
-	defer tx.Rollback(ctx)
 
-	var chatId int
-
-	_, err = m.getChat(ctx, msg.ChatId)
-	if err != nil {
-		if err == ErrorChatDoesntExist {
-			createdId, err := m.createChat(ctx, msg.SenderId, msg.RecipientId)
-			if err != nil {
-				return fmt.Errorf("[SaveMessage] error: %s", err)
-			}
-			chatId = createdId
-		} else {
-			return fmt.Errorf("[SaveMessage] error: %s", err)
+	var out []string
+	for rows.Next() {
+		var row string
+		err := rows.Scan(
+			&row,
+		)
+		if err != nil {
+			continue
 		}
-	} else {
-		chatId = msg.ChatId
+		out = append(out, row)
 	}
 
-	query := `insert into message(chatId, senderId, recipientId, data)
-				values ($1, $2, $3, $4)`
+	return out, nil
+}
 
-	_, err = m.pool.Exec(ctx, query, chatId, msg.SenderId, msg.RecipientId, msg.Content)
+func (m *messageHandler) AddUserToChat(ctx context.Context, chatId int, userLogin string) error {
+	query := `insert into chat_user(chatId, userLogin)
+				select $1, $2
+				where (
+					select count(*) from chat_user where chatId = $1
+				) < (
+					select maxMembers from chat where id = $1
+				)`
+
+	res, err := m.pool.Exec(ctx, query, chatId, userLogin)
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("[AddUserToChat] error: can't add user")
+	}
+
+	return err
+}
+
+// tx method
+func (m *messageHandler) chatIsExist(tx postgres.Tx, ctx context.Context, chatId int) error {
+	query := `select exists(
+					select 1
+					from chat
+					where id = $1)`
+
+	var res bool
+	err := tx.QueryRow(ctx, query, chatId).Scan(&res)
+	if err != nil {
+		return fmt.Errorf("[chatIsExist] error: %s", err)
+	}
+	if !res {
+		return ErrorChatDoesntExist
+	}
+	return nil
+}
+
+func (m *messageHandler) GetAllUserChats(ctx context.Context, login string) ([]models.EventChatPayload, error) {
+	query := `select chatId
+				from chat_user
+				where userLogin = $1`
+	rows, err := m.pool.Query(ctx, query, login)
+	if err != nil {
+		return nil, fmt.Errorf("[GetAllUserChat] error: %s", err)
+	}
+
+	var out []models.EventChatPayload
+	for rows.Next() {
+		var row models.EventChatPayload
+		err := rows.Scan(&row.ChatId)
+		if err != nil {
+			continue
+		}
+		out = append(out, row)
+	}
+
+	return out, nil
+}
+
+func (m *messageHandler) SaveMessage(ctx context.Context, msg *models.EventSendMessagePayload) error {
+	query := `insert into message(chatId, senderLogin, data)
+				values ($1, $2, $3)`
+
+	_, err := m.pool.Exec(ctx, query, msg.ChatId, msg.SenderLogin, msg.Content)
 	if err != nil {
 		return fmt.Errorf("[SaveMessage] error: %s", err)
 	}
@@ -112,10 +139,10 @@ func (m *messageHandler) SaveMessage(ctx context.Context, msg *models.EventSendM
 }
 
 func (m *messageHandler) GetMessageHistory(ctx context.Context, startNum int, chatId int) ([]models.EventSendMessagePayload, error) {
-	query := `select id, senderId, recipientId, data, addedAt
+	query := `select id, senderLogin, data, addedAt
 				from message m
 				where chatId = $1
-				order by addedAt desc
+				order by addedAt
 				offset $2
 				limit 100`
 
@@ -130,8 +157,7 @@ func (m *messageHandler) GetMessageHistory(ctx context.Context, startNum int, ch
 		var row models.EventSendMessagePayload
 		err := rows.Scan(
 			&row.Id,
-			&row.SenderId,
-			&row.RecipientId,
+			&row.SenderLogin,
 			&row.Content,
 			&row.CreatedAt,
 		)
