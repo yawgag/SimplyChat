@@ -55,7 +55,7 @@ func NewApp() (*App, error) {
 }
 
 func (a *App) Run() {
-	if err := http.ListenAndServe("0.0.0.0:8081", a.Router); err != nil { // TODO: chat to cfg addr
+	if err := http.ListenAndServe(a.Config.ServiceAddr, a.Router); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Run server")

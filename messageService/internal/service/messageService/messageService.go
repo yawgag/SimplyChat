@@ -46,6 +46,10 @@ func (m *messageHandler) WriteMessage(ctx context.Context, login string) {
 		log.Println("[WriteMessage] error: ", err)
 		return
 	}
+
+	heartbeatTicker := time.NewTicker(60 * time.Second)
+	defer heartbeatTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -56,8 +60,18 @@ func (m *messageHandler) WriteMessage(ctx context.Context, login string) {
 				return
 			}
 			client.Conn.WriteMessage(websocket.TextMessage, msg)
-		case <-time.After(time.Minute): // TODO: add heartbeat later
-			continue
+		case <-heartbeatTicker.C:
+			err := client.Conn.WriteControl(
+				websocket.PingMessage,
+				[]byte("heartbeat"),
+				time.Now().Add(10*time.Second),
+			)
+			if err != nil {
+				log.Printf("[WriteMessage] heartbeat error for client %s: %v\n", login, err)
+				m.ClientStorage.DeleteClient(login)
+				return
+			}
+
 		}
 	}
 }
@@ -175,9 +189,12 @@ func (m *messageHandler) handleNewChat(data json.RawMessage, login string) error
 		return fmt.Errorf("[handleNewChat] error: %s", err)
 	}
 
-	client.Send <- jsonEvent // TODO: add timeout
-
-	return nil
+	select {
+	case client.Send <- jsonEvent:
+		return nil
+	case <-time.After(time.Second * 3):
+		return fmt.Errorf("[handleNewChat] error: 3 second timeout")
+	}
 }
 
 func (m *messageHandler) handleNewUserInChat(data json.RawMessage) error {
@@ -220,9 +237,12 @@ func (m *messageHandler) handleNewUserInChat(data json.RawMessage) error {
 		return fmt.Errorf("[handleNewUserInChat] error: %s", err)
 	}
 
-	client.Send <- jsonEvent // TODO: add timeout
-
-	return nil
+	select {
+	case client.Send <- jsonEvent:
+		return nil
+	case <-time.After(time.Second * 3):
+		return fmt.Errorf("[handleNewUserInChat] error: 3 second timeout")
+	}
 }
 
 func (m *messageHandler) handleNewActiveChat(data json.RawMessage) error {
@@ -258,12 +278,15 @@ func (m *messageHandler) handleNewActiveChat(data json.RawMessage) error {
 		//
 		// user is offline. Send notification
 		//
-		return fmt.Errorf("[handleSendMessage] error: %s", err)
+		return fmt.Errorf("[handleNewActiveChat] error: %s", err)
 	}
 
-	client.Send <- jsonEvent // TODO: add timeout
-
-	return nil
+	select {
+	case client.Send <- jsonEvent:
+		return nil
+	case <-time.After(time.Second * 3):
+		return fmt.Errorf("[handleNewActiveChat] error: 3 second timeout")
+	}
 }
 
 func (m *messageHandler) handleSendMessage(data json.RawMessage) error {
@@ -308,8 +331,8 @@ func (m *messageHandler) handleSendMessage(data json.RawMessage) error {
 		select {
 		case client.Send <- jsonEventMessage:
 			return nil
-		case <-time.After(time.Second * 2):
-			return fmt.Errorf("[handleSendMessage] error: 2 second timeout")
+		case <-time.After(time.Second * 3):
+			return fmt.Errorf("[handleSendMessage] error: 3 second timeout")
 		}
 	}
 

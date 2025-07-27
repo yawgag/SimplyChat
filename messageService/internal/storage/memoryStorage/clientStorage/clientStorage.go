@@ -7,6 +7,7 @@ import (
 	"log"
 	"messageService/internal/models"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -37,6 +38,10 @@ func (c *clientStorage) SaveClient(login string, conn *websocket.Conn, cancel co
 		CloseHandling: cancel,
 	}
 	c.mut.Unlock()
+	conn.SetPongHandler(func(appData string) error {
+		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		return nil
+	})
 }
 
 func (c *clientStorage) GetClient(login string) (*models.Client, error) {
@@ -45,7 +50,7 @@ func (c *clientStorage) GetClient(login string) (*models.Client, error) {
 	c.mut.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("connection doesn't exist")
+		return nil, fmt.Errorf("user if offline")
 	}
 	return client, nil
 }
