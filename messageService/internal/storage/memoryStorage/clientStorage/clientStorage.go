@@ -39,7 +39,7 @@ func (c *clientStorage) SaveClient(login string, conn *websocket.Conn, cancel co
 	}
 	c.mut.Unlock()
 	conn.SetPongHandler(func(appData string) error {
-		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(180 * time.Second))
 		return nil
 	})
 }

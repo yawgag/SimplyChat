@@ -17,7 +17,7 @@ import (
 
 var (
 	ErrorListDoesntExist error         = errors.New("list doesn't exist")
-	MembersListTTL       time.Duration = 30 * time.Second
+	MembersListTTL       time.Duration = 5 * time.Minute
 )
 
 type chatMemberStorage struct {

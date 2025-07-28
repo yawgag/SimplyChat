@@ -64,7 +64,7 @@ func (m *messageHandler) WriteMessage(ctx context.Context, login string) {
 			err := client.Conn.WriteControl(
 				websocket.PingMessage,
 				[]byte("heartbeat"),
-				time.Now().Add(10*time.Second),
+				time.Now().Add(60*time.Second),
 			)
 			if err != nil {
 				log.Printf("[WriteMessage] heartbeat error for client %s: %v\n", login, err)
