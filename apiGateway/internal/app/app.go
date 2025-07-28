@@ -40,6 +40,10 @@ func NewApp() (*App, error) {
 	authClient := client.NewAuthClient(grpcConnection)
 	authService := service.NewAuthService(authClient)
 
+	//init message service
+	messageClient := client.NewMessageClient(cfg.MessageServiceAddr)
+	messageService := service.NewMessageService(messageClient)
+
 	// get public rsa key
 	publicRSAKey, err := authClient.GetPublicRSAKey(context.Background())
 	if err != nil {
@@ -47,7 +51,7 @@ func NewApp() (*App, error) {
 	}
 
 	// init gatewat
-	gatewayService := service.NewGatewayService(authService)
+	gatewayService := service.NewGatewayService(authService, messageService)
 
 	srv := handler.NewServer(gatewayService)
 
@@ -63,7 +67,7 @@ func NewApp() (*App, error) {
 }
 
 func (a *App) Run() {
-	if err := http.ListenAndServe(":8080", a.Router); err != nil {
+	if err := http.ListenAndServe(":8080", a.Router); err != nil { // TODO: change that addr
 		log.Fatal(err)
 	}
 }

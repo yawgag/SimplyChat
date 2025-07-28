@@ -9,7 +9,9 @@ require (
 )
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.2.3
 	github.com/gorilla/mux v1.8.1
+	github.com/gorilla/websocket v1.5.3
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
