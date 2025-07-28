@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход и регистрация</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .tab-active { @apply bg-blue-500 text-white; }
+    .tab-inactive { @apply bg-gray-200 text-gray-700 hover:bg-gray-300; }
+  </style>
+</head>
+<body class="bg-gray-100 h-screen flex items-center justify-center">
+  <div class="w-full max-w-md bg-white p-8 rounded-lg shadow-lg">
+    <h1 class="text-2xl font-bold mb-6 text-center">Чат-приложение</h1>
+
+    <!-- Вкладки -->
+    <div class="flex mb-6 border-b">
+      <button id="loginTab" class="tab-active px-4 py-2 flex-1 text-center">Вход</button>
+      <button id="registerTab" class="tab-inactive px-4 py-2 flex-1 text-center">Регистрация</button>
+    </div>
+
+    <!-- Форма входа -->
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Логин</label>
+        <input type="text" id="loginInput" required
+               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Пароль</label>
+        <input type="password" id="passwordInput" required
+               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+      </div>
+      <button type="submit"
+              class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition">
+        Войти
+      </button>
+    </form>
+
+    <!-- Форма регистрации -->
+    <form id="registerForm" class="space-y-4 hidden">
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Логин</label>
+        <input type="text" id="regLoginInput" required
+               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Email</label>
+        <input type="email" id="emailInput" required
+               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Пароль</label>
+        <input type="password" id="regPasswordInput" required
+               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+      </div>
+      <button type="submit"
+              class="w-full bg-purple-500 text-white py-2 rounded hover:bg-purple-600 transition">
+        Зарегистрироваться
+      </button>
+    </form>
+
+    <p id="authError" class="text-red-500 text-sm mt-4 hidden"></p>
+  </div>
+
+  <script>
+    // Переключение между формами
+    document.getElementById("loginTab").onclick = () => {
+      document.getElementById("loginTab").classList.replace("tab-inactive", "tab-active");
+      document.getElementById("registerTab").classList.replace("tab-active", "tab-inactive");
+      document.getElementById("loginForm").classList.remove("hidden");
+      document.getElementById("registerForm").classList.add("hidden");
+      document.getElementById("authError").classList.add("hidden");
+    };
+
+    document.getElementById("registerTab").onclick = () => {
+      document.getElementById("registerTab").classList.replace("tab-inactive", "tab-active");
+      document.getElementById("loginTab").classList.replace("tab-active", "tab-inactive");
+      document.getElementById("registerForm").classList.remove("hidden");
+      document.getElementById("loginForm").classList.add("hidden");
+      document.getElementById("authError").classList.add("hidden");
+    };
+
+    // Обработчик входа
+    document.getElementById("loginForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const login = document.getElementById("loginInput").value;
+      const password = document.getElementById("passwordInput").value;
+
+      try {
+        const res = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ login, password }),
+        });
+
+        if (res.ok) {
+          localStorage.setItem("userLogin", login);
+          window.location.href = "/";
+        } else {
+          const data = await res.json();
+          showError(data.message || "Ошибка входа");
+        }
+      } catch (err) {
+        showError("Ошибка сети");
+      }
+    };
+
+    // Обработчик регистрации
+    document.getElementById("registerForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const login = document.getElementById("regLoginInput").value;
+      const email = document.getElementById("emailInput").value;
+      const password = document.getElementById("regPasswordInput").value;
+
+      try {
+        const res = await fetch("/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ login, email, password }),
+        });
+
+        if (res.ok) {
+          localStorage.setItem("userLogin", login);
+          window.location.href = "/";
+        } else {
+          const data = await res.json();
+          showError(data.message || "Ошибка регистрации");
+        }
+      } catch (err) {
+        showError("Ошибка сети");
+      }
+    };
+
+    function showError(msg) {
+      const errorEl = document.getElementById("authError");
+      errorEl.textContent = msg;
+      errorEl.classList.remove("hidden");
+    }
+  </script>
+</body>
+</html>

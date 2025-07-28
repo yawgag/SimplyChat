@@ -3,16 +3,16 @@ package config
 import "os"
 
 type Config struct {
-	GatewayAddr     string
-	AuthServiceAddr string
+	GatewayAddr        string
+	AuthServiceAddr    string
+	MessageServiceAddr string
 }
 
 func LoadConfig() (*Config, error) {
 	config := &Config{
-		// GatewayAddr:     os.Getenv("SERVER_ADDRESS"),
-		// AuthServiceAddr: os.Getenv("AUTH_SERVICE_ADDRESS"),
-		AuthServiceAddr: os.Getenv("AUTHSERVICE_ADDR"),
-		GatewayAddr:     ":8080",
+		AuthServiceAddr:    os.Getenv("AUTHSERVICE_ADDR"),
+		MessageServiceAddr: os.Getenv("MESSAGESERVICE_ADDR"),
+		GatewayAddr:        os.Getenv("SERVICE_ADDR"),
 	}
 	return config, nil
 }

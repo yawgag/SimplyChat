@@ -47,11 +47,7 @@ func (a *authHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(tokens); err != nil {
-		log.Println("[Login] error: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	setTokensCookie(w, tokens)
 }
 
 func (a *authHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -81,25 +77,66 @@ func (a *authHandler) Register(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	if err := json.NewEncoder(w).Encode(tokens); err != nil {
-		log.Println("[Register] error: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	setTokensCookie(w, tokens)
 }
 
 func (a *authHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	token := r.Header.Get("refresh-token")
-	if len(token) != 1 || token == "" {
+
+	accessTokenCookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if accessTokenCookie.Value == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	err := a.gateway.Logout(r.Context(), token)
+	err = a.gateway.Logout(r.Context(), accessTokenCookie.Value)
 	if err != nil {
 		log.Println("[Logout] error: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	deleteCookie(w, "access_token")
+	deleteCookie(w, "refresh_token")
+}
+
+func setTokensCookie(w http.ResponseWriter, tokens *models.AuthTokens) {
+	if tokens.AccessToken != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "access_token",
+			Value:    tokens.AccessToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   15 * 60,
+		})
+	}
+	if tokens.RefreshToken != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    tokens.RefreshToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   30 * 24 * 60 * 60,
+		})
+	}
+}
+
+func deleteCookie(w http.ResponseWriter, name string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	})
 }

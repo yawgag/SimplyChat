@@ -9,6 +9,12 @@ type AuthTokens struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
+type AccessToken struct {
+	Uid      uuid.UUID
+	UserRole string
+	Exp      int64
+}
+
 type User struct {
 	Uid      *uuid.UUID `json:"uid"`
 	Login    *string    `json:"login"`
