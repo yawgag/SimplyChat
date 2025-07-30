@@ -13,7 +13,9 @@ type GatewayService interface {
 	Login(ctx context.Context, user *models.User) (*models.AuthTokens, error)
 	Register(ctx context.Context, user *models.User) (*models.AuthTokens, error)
 	Logout(ctx context.Context, refreshToken string) error
+
 	UpdateTokens(ctx context.Context, refreshToken string) (*models.AuthTokens, error)
+	ValidateAccessToken(tokenString string) (*models.AccessToken, error)
 
 	WsProxy(userConn *websocket.Conn, login string)
 }
@@ -24,10 +26,11 @@ type gatewayService struct {
 	tokensHandler TokensHandler
 }
 
-func NewGatewayService(auth AuthService, message MessageService) GatewayService {
+func NewGatewayService(auth AuthService, message MessageService, tokensHandler TokensHandler) GatewayService {
 	out := &gatewayService{
-		auth:    auth,
-		message: message,
+		auth:          auth,
+		message:       message,
+		tokensHandler: tokensHandler,
 	}
 	return out
 }
@@ -52,6 +55,10 @@ func (g *gatewayService) Register(ctx context.Context, user *models.User) (*mode
 func (g *gatewayService) Logout(ctx context.Context, refreshToken string) error {
 	err := g.auth.Logout(ctx, refreshToken)
 	return err
+}
+
+func (g *gatewayService) ValidateAccessToken(tokenString string) (*models.AccessToken, error) {
+	return g.tokensHandler.ValidateAccessToken(tokenString)
 }
 
 func (g *gatewayService) UpdateTokens(ctx context.Context, refreshToken string) (*models.AuthTokens, error) {

@@ -40,6 +40,8 @@ func NewApp() (*App, error) {
 	authClient := client.NewAuthClient(grpcConnection)
 	authService := service.NewAuthService(authClient)
 
+	tokensHandler := service.NewTokensHadnler(authClient)
+
 	//init message service
 	messageClient := client.NewMessageClient(cfg.MessageServiceAddr)
 	messageService := service.NewMessageService(messageClient)
@@ -51,9 +53,9 @@ func NewApp() (*App, error) {
 	}
 
 	// init gatewat
-	gatewayService := service.NewGatewayService(authService, messageService)
+	gatewayService := service.NewGatewayService(authService, messageService, tokensHandler)
 
-	srv := handler.NewServer(gatewayService)
+	srv := handler.NewServer(gatewayService, tokensHandler)
 
 	router := srv.InitRouter()
 
@@ -67,7 +69,7 @@ func NewApp() (*App, error) {
 }
 
 func (a *App) Run() {
-	if err := http.ListenAndServe(":8080", a.Router); err != nil { // TODO: change that addr
+	if err := http.ListenAndServe(a.Config.GatewayAddr, a.Router); err != nil {
 		log.Fatal(err)
 	}
 }

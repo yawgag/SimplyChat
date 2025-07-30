@@ -47,7 +47,8 @@ func (a *authHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setTokensCookie(w, tokens)
+	setAccessTokenCookie(w, tokens.AccessToken)
+	setRefreshTokenCookie(w, tokens.RefreshToken)
 }
 
 func (a *authHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +78,9 @@ func (a *authHandler) Register(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	setTokensCookie(w, tokens)
+
+	setAccessTokenCookie(w, tokens.AccessToken)
+	setRefreshTokenCookie(w, tokens.RefreshToken)
 }
 
 func (a *authHandler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -104,26 +107,71 @@ func (a *authHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	deleteCookie(w, "refresh_token")
 }
 
-func setTokensCookie(w http.ResponseWriter, tokens *models.AuthTokens) {
-	if tokens.AccessToken != "" {
+func (a *authHandler) HandleCheckAuth(w http.ResponseWriter, r *http.Request) {
+	accessTokenCookie, err := r.Cookie("access_token")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			http.Error(w, "No access token", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Error reading cookie", http.StatusInternalServerError)
+		return
+	}
+
+	if accessTokenCookie.Value == "" {
+		http.Error(w, "Empty access token", http.StatusUnauthorized)
+		return
+	}
+
+	_, err = a.gateway.ValidateAccessToken(accessTokenCookie.Value)
+	if err != nil {
+		http.Error(w, "Invalid access token", http.StatusUnauthorized)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (a *authHandler) HandleUpdateTokens(w http.ResponseWriter, r *http.Request) {
+	refershTokenCookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tokens, err := a.gateway.UpdateTokens(r.Context(), refershTokenCookie.Value)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	setAccessTokenCookie(w, tokens.AccessToken)
+	w.WriteHeader(http.StatusOK)
+}
+
+func setAccessTokenCookie(w http.ResponseWriter, accessToken string) {
+	if accessToken != "" {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "access_token",
-			Value:    tokens.AccessToken,
+			Value:    accessToken,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
+			Secure:   false,
+			SameSite: http.SameSiteLaxMode,
 			MaxAge:   15 * 60,
 		})
 	}
-	if tokens.RefreshToken != "" {
+}
+
+func setRefreshTokenCookie(w http.ResponseWriter, refreshToken string) {
+	if refreshToken != "" {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "refresh_token",
-			Value:    tokens.RefreshToken,
+			Value:    refreshToken,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
+			Secure:   false,
+			SameSite: http.SameSiteLaxMode,
 			MaxAge:   30 * 24 * 60 * 60,
 		})
 	}

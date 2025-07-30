@@ -103,5 +103,6 @@ func (g *grpcClient) UpdateTokens(ctx context.Context, refreshToken string) (*mo
 		AccessToken:  pbTokens.AccessToken,
 		RefreshToken: pbTokens.RefreshToken,
 	}
+
 	return out, nil
 }

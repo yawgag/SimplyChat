@@ -21,7 +21,7 @@ func NewMessageClient(addr string) *messageCilent {
 }
 
 func (m *messageCilent) ConnectToMessageService(login string) (*websocket.Conn, error) {
-	backendURL := m.addr + "?login=" + login
+	backendURL := "ws://" + m.addr + "/chat?login=" + login
 	backendConn, _, err := websocket.DefaultDialer.Dial(backendURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("[ConnectToMessageService] error: %s", err)

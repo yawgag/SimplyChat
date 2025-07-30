@@ -12,20 +12,24 @@ type Server struct {
 	tokensHandler service.TokensHandler
 }
 
-func NewServer(gateway service.GatewayService) *Server {
-	return &Server{Gateway: gateway}
+func NewServer(gateway service.GatewayService, tokensHandler service.TokensHandler) *Server {
+	return &Server{
+		Gateway:       gateway,
+		tokensHandler: tokensHandler}
 }
 
 func (s *Server) InitRouter() *mux.Router {
 	router := mux.NewRouter()
 
+	messageHandler := NewMessageHandler(s.Gateway, s.tokensHandler)
+	router.HandleFunc("/chat", messageHandler.ConnectToChat)
+
 	authHandler := NewAuthHandler(s.Gateway)
+	router.HandleFunc("/api/auth/refresh", authHandler.HandleUpdateTokens)
+	router.HandleFunc("/api/auth/check", authHandler.HandleCheckAuth)
 	router.HandleFunc("/login", authHandler.Login)
 	router.HandleFunc("/register", authHandler.Register)
 	router.HandleFunc("/logout", authHandler.Logout)
-
-	messageHandler := NewMessageHandler(s.Gateway, s.tokensHandler)
-	router.HandleFunc("/chat", messageHandler.ConnectToChat)
 
 	// TODO: rewrite part below
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

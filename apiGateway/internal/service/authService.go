@@ -4,8 +4,13 @@ import (
 	"apiGateway/internal/client"
 	"apiGateway/internal/models"
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -18,21 +23,44 @@ type AuthService interface {
 	Logout(ctx context.Context, refreshToken string) error
 }
 
-type TokensHandler interface {
-	UpdateTokens(ctx context.Context, refreshToken string) (*models.AuthTokens, error)
-	ValidateAccessToken(tokenString string) (*models.AccessToken, error)
-}
-
-type authService struct {
-	client       client.AuthClient
-	publicRsaKey string
-}
-
 func NewAuthService(client client.AuthClient) AuthService {
 	out := &authService{
 		client: client,
 	}
 	return out
+}
+
+type TokensHandler interface {
+	UpdateTokens(ctx context.Context, refreshToken string) (*models.AuthTokens, error)
+	ValidateAccessToken(tokenString string) (*models.AccessToken, error)
+}
+
+func NewTokensHadnler(client client.AuthClient) TokensHandler {
+	publicKeyPem, err := client.GetPublicRSAKey(context.Background())
+	if err != nil {
+		log.Fatal("[NewTokensHadnler] internal error: ", err)
+	}
+
+	block, _ := pem.Decode([]byte(publicKeyPem))
+	if block == nil {
+		log.Fatal("[NewTokensHadnler] internal error")
+	}
+
+	pubKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+	if err != nil {
+		log.Fatal("[NewTokensHadnler] internal error: ", err)
+	}
+
+	out := &authService{
+		client:       client,
+		publicRsaKey: pubKey,
+	}
+	return out
+}
+
+type authService struct {
+	client       client.AuthClient
+	publicRsaKey *rsa.PublicKey
 }
 
 func (a *authService) Login(ctx context.Context, user *models.User) (*models.AuthTokens, error) {
@@ -67,7 +95,8 @@ func (a *authService) UpdateTokens(ctx context.Context, refreshToken string) (*m
 }
 
 func (a *authService) ValidateAccessToken(tokenString string) (*models.AccessToken, error) {
-	jwtToken, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	token := strings.TrimPrefix(tokenString, "Bearer ")
+	jwtToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		_, ok := token.Method.(*jwt.SigningMethodRSA)
 		if !ok {
 			return nil, fmt.Errorf("[ValidateAccessToken] error: wrong token format")

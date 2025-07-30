@@ -27,7 +27,7 @@ var upgrader = websocket.Upgrader{ // TODO: rewrite later
 func (m *messageHandler) ConnectToChat(w http.ResponseWriter, r *http.Request) {
 	accessTokenCookie, err := r.Cookie("access_token")
 	if err != nil {
-		http.Error(w, "Internal error", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 

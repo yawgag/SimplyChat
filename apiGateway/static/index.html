@@ -6,6 +6,17 @@
   <title>Chat Interface</title>
   <script defer src="script.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+  .new-message-indicator {
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+  }
+</style>
 </head>
 <body class="h-screen flex flex-col">
   <!-- Верхний блок -->
