@@ -14,6 +14,7 @@ const sendMessageBtn = document.getElementById("sendMessageBtn");
 const messageInput = document.getElementById("messageInput");
 const newChatBtn = document.getElementById("newChatBtn");
 const chatTypeModal = document.getElementById("chatTypeModal");
+const cancelNewChatBtn = document.getElementById("cancelNewChatBtn")
 const publicChatBtn = document.getElementById("publicChatBtn");
 const privateChatBtn = document.getElementById("privateChatBtn");
 const addUserModal = document.getElementById("addUserModal");
@@ -229,12 +230,13 @@ function renderChatList(chats = []) {
     span.className = "flex-1"; // Убираем cursor-pointer из span
     
     const addButton = document.createElement("button");
-    addButton.textContent = "+";
+    addButton.textContent = "⋮";
     addButton.className = "text-sm bg-blue-100 text-blue-600 px-2 py-1 rounded ml-2";
     addButton.onclick = (e) => {
       e.stopPropagation(); // Останавливаем всплытие события
       selectedChatForAddUser = chat.chat_id;
       addUserModal.classList.remove("hidden");
+      addUserModal.classList.add("flex");
     };
     
     li.appendChild(span);
@@ -278,8 +280,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   
-  log(`✅ Логин получен из localStorage: ${login}`);
-  userLoginElement.textContent = `Пользователь: ${login}`;
+  //log(`✅ Логин получен из localStorage: ${login}`);
+  //userLoginElement.textContent = `Пользователь: ${login}`;
   
   // 2. Подключаемся к WebSocket
   await connectWebSocket();
@@ -350,6 +352,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   newChatBtn.onclick = () => {
     log("🆕 Подготовка к созданию нового чата");
     chatTypeModal.classList.remove("hidden");
+    chatTypeModal.classList.add("flex");
   };
   
   publicChatBtn.onclick = () => {
@@ -363,7 +366,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     chatTypeModal.classList.add("hidden");
     sendEvent("new_chat", { chat_type: "private" });
   };
-  
+
+  cancelNewChatBtn.onclick = () => {
+    log("отмена создания чата")
+    chatTypeModal.classList.add("hidden");
+  }
+    
   // 6. Обработчики для добавления пользователей
   cancelAddUserBtn.onclick = () => {
     log("❌ Отмена добавления пользователя");
@@ -396,6 +404,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       addUserInput.value = "";
     }
   });
+
+  chatTypeModal.addEventListener('click', (e) => {
+    if (e.target === chatTypeModal) {
+        log("❌ Отмена создания чата (клик вне окна)");
+        chatTypeModal.classList.add("hidden");
+    }
+});
   
   log("✅ Инициализация завершена");
 });
