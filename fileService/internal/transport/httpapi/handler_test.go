@@ -16,10 +16,12 @@ import (
 	"fileService/internal/service/fileservice"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 )
 
 type fileServiceStub struct {
-	uploadFunc func(ctx context.Context, request fileservice.UploadRequest) (*fileentity.File, error)
+	uploadFunc     func(ctx context.Context, request fileservice.UploadRequest) (*fileentity.File, error)
+	getContentFunc func(ctx context.Context, fileID uuid.UUID) (*fileservice.ContentResult, error)
 }
 
 func (s *fileServiceStub) Upload(ctx context.Context, request fileservice.UploadRequest) (*fileentity.File, error) {
@@ -31,6 +33,9 @@ func (s *fileServiceStub) GetMetadata(ctx context.Context, fileID uuid.UUID) (*f
 }
 
 func (s *fileServiceStub) GetContent(ctx context.Context, fileID uuid.UUID) (*fileservice.ContentResult, error) {
+	if s.getContentFunc != nil {
+		return s.getContentFunc(ctx, fileID)
+	}
 	return nil, nil
 }
 
@@ -89,4 +94,47 @@ func TestUploadResponseUsesStableDownloadRoute(t *testing.T) {
 	if response.Links.Download != expectedDownload {
 		t.Fatalf("expected stable download route %q, got %q", expectedDownload, response.Links.Download)
 	}
+}
+
+func TestDownloadStreamsFileAsAttachment(t *testing.T) {
+	fileID := uuid.New()
+	handler := NewHandler(&fileServiceStub{
+		getContentFunc: func(ctx context.Context, requestedID uuid.UUID) (*fileservice.ContentResult, error) {
+			if requestedID != fileID {
+				t.Fatalf("unexpected file id: %s", requestedID)
+			}
+			return &fileservice.ContentResult{
+				File: &fileentity.File{
+					ID:               fileID,
+					OriginalFilename: "photo.png",
+					MimeType:         "image/png",
+					Size:             4,
+				},
+				Body: io.NopCloser(strings.NewReader("test")),
+			}, nil
+		},
+	}, 1024, time.Second)
+
+	request := httptest.NewRequest(http.MethodGet, "/files/"+fileID.String()+"/download", nil)
+	request = muxSetVars(request, map[string]string{"id": fileID.String()})
+
+	recorder := httptest.NewRecorder()
+	handler.GetDownloadLink(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+	if got := recorder.Header().Get("Content-Disposition"); got != `attachment; filename="photo.png"` {
+		t.Fatalf("unexpected content disposition: %q", got)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "image/png" {
+		t.Fatalf("unexpected content type: %q", got)
+	}
+	if body := recorder.Body.String(); body != "test" {
+		t.Fatalf("unexpected body: %q", body)
+	}
+}
+
+func muxSetVars(r *http.Request, vars map[string]string) *http.Request {
+	return mux.SetURLVars(r, vars)
 }

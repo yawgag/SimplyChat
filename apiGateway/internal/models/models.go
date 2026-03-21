@@ -11,6 +11,7 @@ type AuthTokens struct {
 
 type AccessToken struct {
 	Uid      uuid.UUID
+	Login    string
 	UserRole string
 	Exp      int64
 }

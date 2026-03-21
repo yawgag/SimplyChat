@@ -120,6 +120,11 @@ func (a *authService) ValidateAccessToken(tokenString string) (*models.AccessTok
 			return nil, fmt.Errorf("[ValidateAccessToken] error: bad access token")
 		}
 
+		login, ok := (claims)["login"].(string)
+		if !ok || login == "" {
+			return nil, fmt.Errorf("[ValidateAccessToken] error: bad access token")
+		}
+
 		userRole, ok := (claims)["userRole"].(string)
 		if !ok {
 			return nil, fmt.Errorf("[ValidateAccessToken] error: bad access token")
@@ -137,6 +142,7 @@ func (a *authService) ValidateAccessToken(tokenString string) (*models.AccessTok
 
 		outToken := &models.AccessToken{
 			Uid:      uid,
+			Login:    login,
 			UserRole: userRole,
 			Exp:      exp,
 		}

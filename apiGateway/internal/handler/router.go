@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"apiGateway/config"
 	"apiGateway/internal/service"
 	"net/http"
 
@@ -10,19 +11,25 @@ import (
 type Server struct {
 	Gateway       service.GatewayService
 	tokensHandler service.TokensHandler
+	config        *config.Config
 }
 
-func NewServer(gateway service.GatewayService, tokensHandler service.TokensHandler) *Server {
+func NewServer(gateway service.GatewayService, tokensHandler service.TokensHandler, cfg *config.Config) *Server {
 	return &Server{
 		Gateway:       gateway,
-		tokensHandler: tokensHandler}
+		tokensHandler: tokensHandler,
+		config:        cfg,
+	}
 }
 
 func (s *Server) InitRouter() *mux.Router {
 	router := mux.NewRouter()
 
-	messageHandler := NewMessageHandler(s.Gateway, s.tokensHandler)
+	messageHandler := NewMessageHandler(s.Gateway, s.tokensHandler, s.config)
 	router.HandleFunc("/chat", messageHandler.ConnectToChat)
+	router.HandleFunc("/chats/{chatId}/messages/files", messageHandler.UploadFileMessage).Methods(http.MethodPost)
+	router.HandleFunc("/files/{fileId}/content", messageHandler.ContentFile).Methods(http.MethodGet)
+	router.HandleFunc("/files/{fileId}/download", messageHandler.DownloadFile).Methods(http.MethodGet)
 
 	authHandler := NewAuthHandler(s.Gateway)
 	router.HandleFunc("/api/auth/refresh", authHandler.HandleUpdateTokens)

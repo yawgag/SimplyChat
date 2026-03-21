@@ -55,7 +55,7 @@ func NewApp() (*App, error) {
 	// init gatewat
 	gatewayService := service.NewGatewayService(authService, messageService, tokensHandler)
 
-	srv := handler.NewServer(gatewayService, tokensHandler)
+	srv := handler.NewServer(gatewayService, tokensHandler, cfg)
 
 	router := srv.InitRouter()
 
