@@ -33,7 +33,7 @@ func NewMessageStorage(pool postgres.DBPool) Handler {
 }
 
 func (m *messageHandler) CreateChat(ctx context.Context, maxMembers int) (int, error) {
-	query := `insert into chat(maxMembers)
+	query := `insert into chat(max_members)
 				values($1)
 				returning id`
 	var chatId int
@@ -46,9 +46,9 @@ func (m *messageHandler) CreateChat(ctx context.Context, maxMembers int) (int, e
 }
 
 func (m *messageHandler) GetAllChatMembers(ctx context.Context, chatId int) ([]string, error) {
-	query := `select userLogin
+	query := `select user_login
 				from chat_user
-				where chatId = $1`
+				where chat_id = $1`
 
 	rows, err := m.pool.Query(ctx, query, chatId)
 	if err != nil {
@@ -71,12 +71,12 @@ func (m *messageHandler) GetAllChatMembers(ctx context.Context, chatId int) ([]s
 }
 
 func (m *messageHandler) AddUserToChat(ctx context.Context, chatId int, userLogin string) error {
-	query := `insert into chat_user(chatId, userLogin)
+	query := `insert into chat_user(chat_id, user_login)
 				select $1, $2
 				where (
-					select count(*) from chat_user where chatId = $1
+					select count(*) from chat_user where chat_id = $1
 				) < (
-					select maxMembers from chat where id = $1
+					select max_members from chat where id = $1
 				)`
 
 	res, err := m.pool.Exec(ctx, query, chatId, userLogin)
@@ -106,9 +106,9 @@ func (m *messageHandler) chatIsExist(tx postgres.Tx, ctx context.Context, chatId
 }
 
 func (m *messageHandler) GetAllUserChats(ctx context.Context, login string) ([]models.EventChatPayload, error) {
-	query := `select chatId
+	query := `select chat_id
 				from chat_user
-				where userLogin = $1`
+				where user_login = $1`
 	rows, err := m.pool.Query(ctx, query, login)
 	if err != nil {
 		return nil, fmt.Errorf("[GetAllUserChat] error: %s", err)
@@ -128,7 +128,7 @@ func (m *messageHandler) GetAllUserChats(ctx context.Context, login string) ([]m
 }
 
 func (m *messageHandler) SaveMessage(ctx context.Context, msg *models.EventSendMessagePayload) error {
-	query := `insert into message(chatId, senderLogin, data)
+	query := `insert into message(chat_id, sender_login, message_text)
 				values ($1, $2, $3)`
 
 	_, err := m.pool.Exec(ctx, query, msg.ChatId, msg.SenderLogin, msg.Content)
@@ -139,10 +139,10 @@ func (m *messageHandler) SaveMessage(ctx context.Context, msg *models.EventSendM
 }
 
 func (m *messageHandler) GetMessageHistory(ctx context.Context, startNum int, chatId int) ([]models.EventSendMessagePayload, error) {
-	query := `select id, senderLogin, data, addedAt
+	query := `select id, sender_login, message_text, added_at
 				from message m
-				where chatId = $1
-				order by addedAt
+				where chat_id = $1
+				order by added_at
 				offset $2
 				limit 100`
 
