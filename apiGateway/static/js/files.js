@@ -1,5 +1,5 @@
 import { elements } from "./dom.js";
-import { state, MAX_FILES_PER_MESSAGE } from "./state.js";
+import { state, MAX_FILES_PER_MESSAGE, ensureHistoryState } from "./state.js";
 import { log } from "./logger.js";
 import { formatFileSize, appendMessageToHistory } from "./messages.js";
 import { uploadFileMessage } from "./api.js";
@@ -114,6 +114,19 @@ export async function sendFileMessage() {
     }
 
     const payload = await response.json();
+    const chatState = ensureHistoryState(payload.chat_id);
+    if (!chatState.itemIds.has(payload.id)) {
+      chatState.items.push(payload);
+      chatState.items.sort((left, right) => {
+        const leftTime = new Date(left.created_at).getTime();
+        const rightTime = new Date(right.created_at).getTime();
+        if (leftTime !== rightTime) {
+          return leftTime - rightTime;
+        }
+        return (left.id ?? 0) - (right.id ?? 0);
+      });
+      chatState.itemIds = new Set(chatState.items.map((message) => message.id));
+    }
     appendMessageToHistory(payload);
     clearSelectedFiles();
     elements.messageInput.value = "";

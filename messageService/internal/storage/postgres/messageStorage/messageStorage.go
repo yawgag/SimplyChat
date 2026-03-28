@@ -46,9 +46,15 @@ type historyRow struct {
 	attachmentKind   *string
 }
 
+type HistoryPageParams struct {
+	ChatID int
+	Limit  int
+	Before *models.MessageHistoryCursor
+}
+
 type Handler interface {
 	SaveMessage(ctx context.Context, msg *models.EventSendMessagePayload) (*models.EventSendMessagePayload, error)
-	GetMessageHistory(ctx context.Context, startNum int, chatId int) ([]models.EventSendMessagePayload, error)
+	GetMessageHistory(ctx context.Context, params HistoryPageParams) (*models.EventSendMessageHistoryPayload, error)
 	GetAllUserChats(ctx context.Context, login string) ([]models.EventChatPayload, error)
 	CreateChat(ctx context.Context, maxMembers int) (int, error)
 	AddUserToChat(ctx context.Context, chatId int, userLogin string) error
@@ -185,22 +191,37 @@ func (m *messageHandler) SaveMessage(ctx context.Context, msg *models.EventSendM
 	return savedMessage, nil
 }
 
-func (m *messageHandler) GetMessageHistory(ctx context.Context, startNum int, chatId int) ([]models.EventSendMessagePayload, error) {
+func (m *messageHandler) GetMessageHistory(ctx context.Context, params HistoryPageParams) (*models.EventSendMessageHistoryPayload, error) {
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
 	query := `with paged_messages as (
 				select id, chat_id, sender_login, kind, coalesce(message_text, '') as message_text, added_at
 				from message
 				where chat_id = $1
-				order by added_at
-				offset $2
-				limit 100
+				  and (
+					$2::timestamptz is null
+					or (added_at, id) < ($2::timestamptz, coalesce($3::int, 0))
+				  )
+				order by added_at desc, id desc
+				limit $4
 			)
 			select pm.id, pm.chat_id, pm.sender_login, pm.kind, pm.message_text, pm.added_at,
 				   a.file_id, a.original_filename, a.mime_type, a.size, a.kind
 			from paged_messages pm
 			left join message_attachment a on a.message_id = pm.id
-			order by pm.added_at, pm.id, a.id`
+			order by pm.added_at desc, pm.id desc, a.id`
 
-	rows, err := m.pool.Query(ctx, query, chatId, startNum)
+	var beforeCreatedAt *time.Time
+	var beforeID *int
+	if params.Before != nil {
+		beforeCreatedAt = &params.Before.CreatedAt
+		beforeID = &params.Before.ID
+	}
+
+	rows, err := m.pool.Query(ctx, query, params.ChatID, beforeCreatedAt, beforeID, limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("[GetMessageHistory] error: %s", err)
 	}
@@ -228,7 +249,27 @@ func (m *messageHandler) GetMessageHistory(ctx context.Context, startNum int, ch
 		historyRows = append(historyRows, row)
 	}
 
-	return aggregateHistoryRows(historyRows), nil
+	history := aggregateHistoryRows(historyRows)
+	hasMore := len(history) > limit
+	if hasMore {
+		history = history[:limit]
+	}
+	reverseHistory(history)
+
+	page := &models.EventSendMessageHistoryPayload{
+		ChatId:  params.ChatID,
+		Items:   history,
+		HasMore: hasMore,
+	}
+	if hasMore && len(history) > 0 {
+		oldest := history[0]
+		page.NextCursor = &models.MessageHistoryCursor{
+			CreatedAt: oldest.CreatedAt,
+			ID:        oldest.Id,
+		}
+	}
+
+	return page, nil
 }
 
 func aggregateHistoryRows(rows []historyRow) []models.EventSendMessagePayload {
@@ -290,6 +331,12 @@ func int64OrZero(value *int64) int64 {
 		return 0
 	}
 	return *value
+}
+
+func reverseHistory(history []models.EventSendMessagePayload) {
+	for left, right := 0, len(history)-1; left < right; left, right = left+1, right-1 {
+		history[left], history[right] = history[right], history[left]
+	}
 }
 
 func (m *messageHandler) ChatExists(ctx context.Context, chatId int) (bool, error) {

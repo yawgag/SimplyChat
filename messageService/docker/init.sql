@@ -21,7 +21,7 @@ create table message(
     added_at timestamptz not null default now()
 );
 
-create index idx_message_chat_timestamp on message(chat_id, added_at desc);
+create index idx_message_chat_added_id_desc on message(chat_id, added_at desc, id desc);
 
 create table message_attachment(
     id serial primary key,

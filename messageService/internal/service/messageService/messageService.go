@@ -19,6 +19,8 @@ const (
 	chatTypePrivate           string = "private"
 	numberOfUserInPrivateChat int    = 2
 	numberOfUserInPublicChat  int    = 250
+	defaultHistoryPageLimit   int    = 50
+	maxHistoryPageLimit       int    = 100
 )
 
 type messageHandler struct {
@@ -104,6 +106,11 @@ func (m *messageHandler) ReadMessage(ctx context.Context, login string) {
 			}
 
 			switch event.EventType {
+			case models.EventGetMessageHistory:
+				err := m.handleGetMessageHistory(event.Data, login)
+				if err != nil {
+					log.Println("[EventGetMessageHistory] error: ", err)
+				}
 			case models.EventSetActiveChat:
 				err := m.handleNewActiveChat(event.Data)
 				if err != nil {
@@ -255,19 +262,77 @@ func (m *messageHandler) handleNewActiveChat(data json.RawMessage) error {
 		return fmt.Errorf("[handleNewActiveChat] error: %s", err)
 	}
 
+	if payload.Login == "" || payload.ChatId <= 0 {
+		return fmt.Errorf("[handleNewActiveChat] error: bad request")
+	}
+
+	return nil
+}
+
+func (m *messageHandler) handleGetMessageHistory(data json.RawMessage, login string) error {
+	var payload models.EventGetMessageHistoryPayload
+	fail := func(chatID int, message string, err error) error {
+		if sendErr := m.sendHistoryError(login, chatID, message); sendErr != nil {
+			log.Println("[sendHistoryError] error: ", sendErr)
+		}
+		if err != nil {
+			return fmt.Errorf("[handleGetMessageHistory] error: %w", err)
+		}
+		return fmt.Errorf("[handleGetMessageHistory] error: %s", message)
+	}
+
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return fail(0, "invalid history request payload", err)
+	}
+	if payload.ChatId <= 0 {
+		return fail(payload.ChatId, "invalid chat id", nil)
+	}
+	if payload.Login != "" && payload.Login != login {
+		return fail(payload.ChatId, "login mismatch", nil)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	history, err := m.MessageStorage.GetMessageHistory(ctx, 0, payload.ChatId)
+	exists, err := m.MessageStorage.ChatExists(ctx, payload.ChatId)
 	if err != nil {
-		return fmt.Errorf("[handleNewActiveChat] error: %s", err)
+		return fail(payload.ChatId, "failed to check chat", err)
 	}
-	for i := range history {
-		enrichMessagePayload(&history[i])
+	if !exists {
+		return fail(payload.ChatId, "chat doesn't exist", nil)
 	}
-	jsonHistory, err := json.Marshal(history)
+
+	isMember, err := m.MessageStorage.IsChatMember(ctx, payload.ChatId, login)
 	if err != nil {
-		return fmt.Errorf("[handleNewActiveChat] error: %s", err)
+		return fail(payload.ChatId, "failed to check chat membership", err)
+	}
+	if !isMember {
+		return fail(payload.ChatId, "access denied", nil)
+	}
+
+	limit := payload.Limit
+	if limit <= 0 {
+		limit = defaultHistoryPageLimit
+	}
+	if limit > maxHistoryPageLimit {
+		limit = maxHistoryPageLimit
+	}
+
+	page, err := m.MessageStorage.GetMessageHistory(ctx, messageStorage.HistoryPageParams{
+		ChatID: payload.ChatId,
+		Limit:  limit,
+		Before: payload.Before,
+	})
+	if err != nil {
+		return fail(payload.ChatId, "failed to load message history", err)
+	}
+	for i := range page.Items {
+		enrichMessagePayload(&page.Items[i])
+	}
+
+	jsonHistory, err := json.Marshal(page)
+	if err != nil {
+		return fail(payload.ChatId, "failed to encode message history", err)
 	}
 
 	event := models.Event{
@@ -277,22 +342,49 @@ func (m *messageHandler) handleNewActiveChat(data json.RawMessage) error {
 
 	jsonEvent, err := json.Marshal(event)
 	if err != nil {
-		return fmt.Errorf("[handleNewActiveChat] error: %s", err)
+		return fail(payload.ChatId, "failed to encode history event", err)
 	}
 
-	client, err := m.ClientStorage.GetClient(payload.Login)
+	client, err := m.ClientStorage.GetClient(login)
 	if err != nil {
-		//
-		// user is offline. Send notification
-		//
-		return fmt.Errorf("[handleNewActiveChat] error: %s", err)
+		return fail(payload.ChatId, "client is offline", err)
 	}
 
 	select {
 	case client.Send <- jsonEvent:
 		return nil
 	case <-time.After(time.Second * 3):
-		return fmt.Errorf("[handleNewActiveChat] error: 3 second timeout")
+		return fail(payload.ChatId, "history response timeout", nil)
+	}
+}
+
+func (m *messageHandler) sendHistoryError(login string, chatID int, message string) error {
+	client, err := m.ClientStorage.GetClient(login)
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(models.EventMessageHistoryErrorPayload{
+		ChatId:  chatID,
+		Message: message,
+	})
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(models.Event{
+		EventType: models.EventMessageHistoryError,
+		Data:      data,
+	})
+	if err != nil {
+		return err
+	}
+
+	select {
+	case client.Send <- payload:
+		return nil
+	case <-time.After(time.Second * 3):
+		return fmt.Errorf("send history error timeout")
 	}
 }
 

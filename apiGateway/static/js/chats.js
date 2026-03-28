@@ -33,7 +33,7 @@ export function markActiveChat(chatElement) {
   }
 }
 
-export function renderChatList(chatItems = [], sendEvent) {
+export function renderChatList(chatItems = [], onSelectChat) {
   elements.chatList.innerHTML = "";
   if (chatItems.length === 0) {
     elements.chatList.innerHTML = "<p class='text-gray-500'>Нет активных чатов</p>";
@@ -44,11 +44,14 @@ export function renderChatList(chatItems = [], sendEvent) {
     const li = document.createElement("li");
     li.id = `chat-item-${chat.chat_id}`;
     li.className = "p-2 border-b border-gray-200 hover:bg-gray-100 flex justify-between items-center cursor-pointer";
+    if (chat.chat_id === state.activeChatId) {
+      li.classList.add("bg-blue-100");
+    }
 
     li.onclick = () => {
       state.activeChatId = chat.chat_id;
-      sendEvent("set_active_chat", { login: state.login, chat_id: chat.chat_id });
       markActiveChat(li);
+      onSelectChat?.(chat.chat_id);
     };
 
     const span = document.createElement("span");
@@ -69,11 +72,11 @@ export function renderChatList(chatItems = [], sendEvent) {
   });
 }
 
-export function addChatIfMissing(chatId, sendEvent) {
+export function addChatIfMissing(chatId, onSelectChat) {
   const newChat = { chat_id: chatId };
   if (!state.chats.some((chat) => chat.chat_id === newChat.chat_id)) {
     state.chats.push(newChat);
-    renderChatList(state.chats, sendEvent);
+    renderChatList(state.chats, onSelectChat);
   }
 }
 

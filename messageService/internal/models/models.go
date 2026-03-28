@@ -26,17 +26,43 @@ type Event struct {
 }
 
 const (
-	EventSendMessageHistory string = "message_history"
-	EventSetActiveChat      string = "set_active_chat"
-	EventSendMessage        string = "send_message"
-	EventNewChat            string = "new_chat"
-	EventAddUserToChat      string = "add_user_to_chat"
-	EventAllUserChats       string = "all_user_chats"
+	EventSendMessageHistory  string = "message_history"
+	EventMessageHistoryError string = "message_history_error"
+	EventGetMessageHistory   string = "get_message_history"
+	EventSetActiveChat       string = "set_active_chat"
+	EventSendMessage         string = "send_message"
+	EventNewChat             string = "new_chat"
+	EventAddUserToChat       string = "add_user_to_chat"
+	EventAllUserChats        string = "all_user_chats"
 )
 
 type EventSetActiveChatPayload struct { // only [user->server] return EventSendMessageHistory
 	Login  string `json:"login"`
 	ChatId int    `json:"chat_id"`
+}
+
+type MessageHistoryCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ID        int       `json:"id"`
+}
+
+type EventGetMessageHistoryPayload struct {
+	Login  string                `json:"login"`
+	ChatId int                   `json:"chat_id"`
+	Limit  int                   `json:"limit,omitempty"`
+	Before *MessageHistoryCursor `json:"before,omitempty"`
+}
+
+type EventSendMessageHistoryPayload struct {
+	ChatId     int                       `json:"chat_id"`
+	Items      []EventSendMessagePayload `json:"items"`
+	HasMore    bool                      `json:"has_more"`
+	NextCursor *MessageHistoryCursor     `json:"next_cursor,omitempty"`
+}
+
+type EventMessageHistoryErrorPayload struct {
+	ChatId  int    `json:"chat_id"`
+	Message string `json:"message"`
 }
 
 type EventSendMessagePayload struct {

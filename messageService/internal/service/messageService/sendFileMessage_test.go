@@ -26,7 +26,7 @@ func (s *sendFileMessageStorageStub) SaveMessage(ctx context.Context, msg *model
 	return nil, errors.New("unexpected SaveMessage call")
 }
 
-func (s *sendFileMessageStorageStub) GetMessageHistory(ctx context.Context, startNum int, chatId int) ([]models.EventSendMessagePayload, error) {
+func (s *sendFileMessageStorageStub) GetMessageHistory(ctx context.Context, params messageStorage.HistoryPageParams) (*models.EventSendMessageHistoryPayload, error) {
 	return nil, nil
 }
 
