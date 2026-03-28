@@ -16,6 +16,7 @@ type GatewayService interface {
 
 	UpdateTokens(ctx context.Context, refreshToken string) (*models.AuthTokens, error)
 	ValidateAccessToken(tokenString string) (*models.AccessToken, error)
+	CanAccessFile(ctx context.Context, login string, fileID string) (bool, error)
 
 	WsProxy(userConn *websocket.Conn, login string)
 }
@@ -68,6 +69,10 @@ func (g *gatewayService) UpdateTokens(ctx context.Context, refreshToken string) 
 	}
 
 	return tokens, nil
+}
+
+func (g *gatewayService) CanAccessFile(ctx context.Context, login string, fileID string) (bool, error) {
+	return g.message.CanAccessFile(ctx, login, fileID)
 }
 
 func (g *gatewayService) WsProxy(userConn *websocket.Conn, login string) {

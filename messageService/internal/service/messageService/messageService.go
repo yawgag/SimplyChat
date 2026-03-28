@@ -25,18 +25,22 @@ type messageHandler struct {
 	ClientStorage      clientStorage.Handler
 	ChatMembersStorage chatMembersStorage.Handler
 	MessageStorage     messageStorage.Handler
+	FileService        FileServiceClient
 }
 
 type Handler interface {
 	ReadMessage(ctx context.Context, login string)
 	WriteMessage(ctx context.Context, login string)
+	SendFileMessage(ctx context.Context, input SendFileMessageInput) (*models.EventSendMessagePayload, error)
+	CanAccessFile(ctx context.Context, login string, fileID string) (bool, error)
 }
 
-func NewMessageHandler(clientStorage clientStorage.Handler, chatMembersStorage chatMembersStorage.Handler, message messageStorage.Handler) Handler {
+func NewMessageHandler(clientStorage clientStorage.Handler, chatMembersStorage chatMembersStorage.Handler, message messageStorage.Handler, fileService FileServiceClient) Handler {
 	return &messageHandler{
 		ClientStorage:      clientStorage,
 		ChatMembersStorage: chatMembersStorage,
 		MessageStorage:     message,
+		FileService:        fileService,
 	}
 }
 
@@ -258,6 +262,9 @@ func (m *messageHandler) handleNewActiveChat(data json.RawMessage) error {
 	if err != nil {
 		return fmt.Errorf("[handleNewActiveChat] error: %s", err)
 	}
+	for i := range history {
+		enrichMessagePayload(&history[i])
+	}
 	jsonHistory, err := json.Marshal(history)
 	if err != nil {
 		return fmt.Errorf("[handleNewActiveChat] error: %s", err)
@@ -297,10 +304,11 @@ func (m *messageHandler) handleSendMessage(data json.RawMessage) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	err := m.MessageStorage.SaveMessage(ctx, &payload)
+	savedMessage, err := m.MessageStorage.SaveMessage(ctx, &payload)
 	if err != nil {
 		return fmt.Errorf("[handleSendMessage] error: %s", err)
 	}
+	enrichMessagePayload(savedMessage)
 
 	chatMembersLogins, err := m.getChatMembers(ctx, payload.ChatId)
 	if err != nil {
@@ -309,14 +317,14 @@ func (m *messageHandler) handleSendMessage(data json.RawMessage) error {
 
 	jsonEventMessage, err := json.Marshal(models.Event{
 		EventType: models.EventSendMessage,
-		Data:      data,
+		Data:      mustMarshalRaw(savedMessage),
 	})
 	if err != nil {
 		return fmt.Errorf("[handleSendMessage] error: %s", err)
 	}
 
 	for _, userLogin := range chatMembersLogins {
-		if userLogin == payload.SenderLogin {
+		if userLogin == savedMessage.SenderLogin {
 			continue
 		}
 
@@ -330,7 +338,7 @@ func (m *messageHandler) handleSendMessage(data json.RawMessage) error {
 
 		select {
 		case client.Send <- jsonEventMessage:
-			return nil
+			continue
 		case <-time.After(time.Second * 3):
 			return fmt.Errorf("[handleSendMessage] error: 3 second timeout")
 		}
@@ -358,6 +366,69 @@ func (m *messageHandler) getChatMembers(ctx context.Context, chatId int) ([]stri
 	}
 
 	return members, nil
+}
+
+func (m *messageHandler) fanOutMessage(ctx context.Context, payload *models.EventSendMessagePayload) error {
+	chatMembersLogins, err := m.getChatMembers(ctx, payload.ChatId)
+	if err != nil {
+		return fmt.Errorf("[fanOutMessage] error: %s", err)
+	}
+
+	jsonEventMessage, err := json.Marshal(models.Event{
+		EventType: models.EventSendMessage,
+		Data:      mustMarshalRaw(payload),
+	})
+	if err != nil {
+		return fmt.Errorf("[fanOutMessage] error: %s", err)
+	}
+
+	for _, userLogin := range chatMembersLogins {
+		if userLogin == payload.SenderLogin {
+			continue
+		}
+
+		client, err := m.ClientStorage.GetClient(userLogin)
+		if err != nil {
+			continue
+		}
+
+		select {
+		case client.Send <- jsonEventMessage:
+		case <-time.After(time.Second * 3):
+			return fmt.Errorf("[fanOutMessage] error: 3 second timeout")
+		}
+	}
+
+	return nil
+}
+
+func enrichMessagePayload(payload *models.EventSendMessagePayload) {
+	if payload.Kind == "" {
+		payload.Kind = messageKindText
+	}
+	if payload.Kind == messageKindFile {
+		payload.Content = ""
+	}
+	if payload.Attachments == nil {
+		payload.Attachments = []models.AttachmentPayload{}
+	}
+	for i := range payload.Attachments {
+		payload.Attachments[i].ContentURL = buildContentURL(payload.Attachments[i].FileID)
+		payload.Attachments[i].DownloadURL = buildDownloadURL(payload.Attachments[i].FileID)
+	}
+}
+
+func buildContentURL(fileID string) string {
+	return "/files/" + fileID + "/content"
+}
+
+func buildDownloadURL(fileID string) string {
+	return "/files/" + fileID + "/download"
+}
+
+func mustMarshalRaw(payload *models.EventSendMessagePayload) json.RawMessage {
+	data, _ := json.Marshal(payload)
+	return data
 }
 
 func (m *messageHandler) handleAllUserChats(login string) error {
@@ -393,4 +464,8 @@ func (m *messageHandler) handleAllUserChats(login string) error {
 	client.Send <- jsonEvent
 
 	return nil
+}
+
+func (m *messageHandler) CanAccessFile(ctx context.Context, login string, fileID string) (bool, error) {
+	return m.MessageStorage.UserHasAccessToFile(ctx, login, fileID)
 }

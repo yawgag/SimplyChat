@@ -11,6 +11,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
+      - auth_db_data:/var/lib/postgresql/data
       - ./authService/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d authdb"]
@@ -41,8 +42,11 @@ services:
       - AUTHSERVICE_ADDR=auth-service:50051
       - SERVICE_ADDR=:8080
       - MESSAGESERVICE_ADDR=message-service:8081
+      - FILESERVICE_ADDR=file-service:8082
     depends_on:
       - auth-service
+      - message-service
+      - file-service
 
   redis:
     image: redis:7
@@ -65,6 +69,7 @@ services:
     ports:
       - "5434:5432"
     volumes:
+      - message_db_data:/var/lib/postgresql/data
       - ./messageService/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d messageDb"]
@@ -79,8 +84,87 @@ services:
       - SERVER_ADDRESS=:8081
       - REDIS_ADDR=redis:6379
       - DB_URL=postgres://user:password@message_db:5432/messageDb
+      - FILESERVICE_URL=http://file-service:8082
+      - FILESERVICE_TIMEOUT=10s
+      - FILESERVICE_UPLOAD_TIMEOUT=2m
+      - FILESERVICE_DELETE_TIMEOUT=10s
     depends_on:
       message_db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      file-service:
+        condition: service_started
+
+  file_db:
+    image: postgres:16
+    container_name: file_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: fileDb
+    ports:
+      - "5435:5432"
+    volumes:
+      - file_db_data:/var/lib/postgresql/data
+      - ./fileService/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d fileDb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-28T09-55-16Z
+    container_name: file_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-02-21T16-00-46Z
+    container_name: file_minio_init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
+      /usr/bin/mc mb --ignore-existing local/simplychat-files;
+      /usr/bin/mc anonymous set none local/simplychat-files;
+      exit 0;
+      "
+
+  file-service:
+    build: ./fileService
+    container_name: file_service
+    environment:
+      - SERVER_ADDRESS=:8082
+      - DB_URL=postgres://user:password@file_db:5432/fileDb
+      - S3_BUCKET=simplychat-files
+      - S3_ENDPOINT=minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_USE_SSL=false
+      - MAX_FILE_SIZE_BYTES=104857600
+      - ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,image/avif,video/mp4,video/webm,application/pdf,text/plain,text/csv,application/rtf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.presentation,application/zip,application/x-zip-compressed,application/x-7z-compressed,application/vnd.rar,application/x-rar-compressed,application/gzip
+      - REQUEST_TIMEOUT=2m
+      - S3_OPERATION_TIMEOUT=2m
+      - S3_MAX_RETRIES=3
+      - PRESIGNED_URL_TTL=15m
+    depends_on:
+      file_db:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+volumes:
+  auth_db_data:
+  message_db_data:
+  file_db_data:
+  minio_data:

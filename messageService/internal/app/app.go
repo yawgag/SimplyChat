@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	fileServiceClient "messageService/internal/client/fileService"
 	"messageService/internal/config"
 	"messageService/internal/service/messageService"
 	"messageService/internal/storage/memoryStorage/clientStorage"
@@ -11,6 +12,7 @@ import (
 	"messageService/internal/storage/postgres/messageStorage"
 	"messageService/internal/storage/redis/chatMembersStorage"
 	"messageService/internal/transport"
+	httptransport "messageService/internal/transport/http"
 	"net/http"
 
 	_ "net/http/pprof"
@@ -42,11 +44,13 @@ func NewApp() (*App, error) {
 	}
 	// statusStorageHandler, err := statusStorage.NewStatusStorage(context.Background(), cfg.RedisAddr)
 
-	messageServiceHandler := messageService.NewMessageHandler(clientStorageHandler, chatMembersStorage, messageStorageHandler)
+	fileClient := fileServiceClient.New(cfg.FileServiceURL, cfg.FileServiceUploadTimeout)
+	messageServiceHandler := messageService.NewMessageHandler(clientStorageHandler, chatMembersStorage, messageStorageHandler, fileClient)
 
 	wsHandler := transport.NewHandler(clientStorageHandler, messageServiceHandler)
+	fileMessageHandler := httptransport.NewFileMessageHandler(messageServiceHandler)
 
-	router := transport.NewServer(wsHandler).InitRouter()
+	router := transport.NewServer(wsHandler, fileMessageHandler).InitRouter()
 
 	return &App{
 		Config: cfg,

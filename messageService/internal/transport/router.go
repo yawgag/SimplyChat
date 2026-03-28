@@ -1,23 +1,32 @@
 package transport
 
 import (
+	httptransport "messageService/internal/transport/http"
 	"net/http/pprof"
 
 	"github.com/gorilla/mux"
 )
 
 type Server struct {
-	handler Handler
+	handler            Handler
+	fileMessageHandler *httptransport.FileMessageHandler
 }
 
-func NewServer(handler Handler) *Server {
-	return &Server{handler: handler}
+func NewServer(handler Handler, fileMessageHandler *httptransport.FileMessageHandler) *Server {
+	return &Server{
+		handler:            handler,
+		fileMessageHandler: fileMessageHandler,
+	}
 }
 
 func (s *Server) InitRouter() *mux.Router {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/chat", s.handler.InitConnection)
+	if s.fileMessageHandler != nil {
+		router.HandleFunc("/chats/{chatId}/messages/files", s.fileMessageHandler.UploadFileMessage)
+		router.HandleFunc("/internal/files/{fileId}/access", s.fileMessageHandler.CheckFileAccess).Methods("GET")
+	}
 
 	setupPprof(router)
 

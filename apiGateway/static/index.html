@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat Interface</title>
-  <script defer src="script.js"></script>
+  <script type="module" src="js/app.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
   .new-message-indicator {
@@ -51,7 +51,16 @@
       <div id="messageHistory" class="flex-grow overflow-y-auto border p-4 rounded bg-white mb-4">
         <!-- История сообщений -->
       </div>
+      <div id="selectedFilesPanel" class="hidden border rounded bg-gray-50 p-3 mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium text-gray-700">Выбранные файлы</span>
+          <button id="clearFilesBtn" class="text-sm text-red-500">Очистить</button>
+        </div>
+        <div id="selectedFilesList" class="space-y-2 text-sm"></div>
+      </div>
       <div class="flex gap-2">
+        <input id="fileInput" type="file" multiple class="hidden">
+        <button id="attachFileBtn" class="bg-blue-500 text-white px-4 py-2 rounded">Файлы</button>
         <input id="messageInput" type="text" placeholder="Введите сообщение..." class="flex-grow border p-2 rounded">
         <button id="sendMessageBtn" class="bg-green-500 text-white px-4 py-2 rounded">Отправить</button>
       </div>

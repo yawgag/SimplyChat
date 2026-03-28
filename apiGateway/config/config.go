@@ -6,12 +6,14 @@ type Config struct {
 	GatewayAddr        string
 	AuthServiceAddr    string
 	MessageServiceAddr string
+	FileServiceAddr    string
 }
 
 func LoadConfig() (*Config, error) {
 	config := &Config{
 		AuthServiceAddr:    os.Getenv("AUTHSERVICE_ADDR"),
 		MessageServiceAddr: os.Getenv("MESSAGESERVICE_ADDR"),
+		FileServiceAddr:    os.Getenv("FILESERVICE_ADDR"),
 		GatewayAddr:        os.Getenv("SERVICE_ADDR"),
 	}
 	return config, nil

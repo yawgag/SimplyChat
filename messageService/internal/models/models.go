@@ -40,11 +40,23 @@ type EventSetActiveChatPayload struct { // only [user->server] return EventSendM
 }
 
 type EventSendMessagePayload struct {
-	Id          int       `json:"id"`
-	ChatId      int       `json:"chat_id"`
-	SenderLogin string    `json:"sender_login"`
-	Content     string    `json:"content"`
-	CreatedAt   time.Time `json:"created_at"`
+	Id          int                 `json:"id"`
+	ChatId      int                 `json:"chat_id"`
+	SenderLogin string              `json:"sender_login"`
+	Kind        string              `json:"kind"`
+	Content     string              `json:"content"`
+	Attachments []AttachmentPayload `json:"attachments"`
+	CreatedAt   time.Time           `json:"created_at"`
+}
+
+type AttachmentPayload struct {
+	FileID           string `json:"file_id"`
+	OriginalFilename string `json:"original_filename"`
+	MimeType         string `json:"mime_type"`
+	Size             int64  `json:"size"`
+	Kind             string `json:"kind"`
+	ContentURL       string `json:"content_url"`
+	DownloadURL      string `json:"download_url"`
 }
 
 type EventChatPayload struct {
