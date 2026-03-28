@@ -18,7 +18,7 @@
   }
 </style>
 </head>
-<body class="h-screen flex flex-col">
+<body class="h-screen overflow-hidden flex flex-col">
   <!-- Верхний блок -->
   <div class="flex-none h-1/5 p-4 border-b border-gray-300 bg-gray-50">
     <div class="flex items-center justify-between mb-4">
@@ -34,9 +34,9 @@
   </div>
   
   <!-- Нижний блок -->
-  <div class="flex-grow flex">
+  <div class="flex-grow min-h-0 flex">
     <!-- Список чатов -->
-    <div class="w-1/6 border-r border-gray-300 p-4 flex flex-col">
+    <div class="w-1/6 min-h-0 border-r border-gray-300 p-4 flex flex-col">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold">Чаты</h2>
         <button id="newChatBtn" class="text-blue-500 text-sm">Новый чат</button>
@@ -47,8 +47,8 @@
     </div>
     
     <!-- Окно чата -->
-    <div class="flex-grow p-4 flex flex-col">
-      <div id="messageHistory" class="flex-grow overflow-y-auto border p-4 rounded bg-white mb-4">
+    <div class="flex-grow min-h-0 p-4 flex flex-col">
+      <div id="messageHistory" class="flex-grow min-h-0 overflow-y-auto border p-4 rounded bg-white mb-4">
         <!-- История сообщений -->
       </div>
       <div id="selectedFilesPanel" class="hidden border rounded bg-gray-50 p-3 mb-4">

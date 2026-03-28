@@ -1,6 +1,8 @@
 import { elements } from "./dom.js";
 import { buildContentURL, buildDownloadURL } from "./api.js";
 
+const HISTORY_STATUS_ID = "history-status";
+
 export function formatFileSize(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) {
     return "0 B";
@@ -113,6 +115,7 @@ function renderAttachments(attachments) {
 function renderMessageItem(message) {
   const msg = normalizeMessage(message);
   const container = document.createElement("div");
+  container.dataset.messageId = String(msg.id);
   container.className = "mb-3 rounded border border-gray-200 bg-white p-3";
 
   const header = document.createElement("div");
@@ -137,30 +140,135 @@ function renderMessageItem(message) {
   return container;
 }
 
-export function appendMessageToHistory(message) {
-  const normalized = normalizeMessage(message);
-  if (elements.messageHistory.firstElementChild?.dataset?.emptyState === "true") {
-    elements.messageHistory.innerHTML = "";
+function getHistoryStatusElement() {
+  let status = document.getElementById(HISTORY_STATUS_ID);
+  if (status) {
+    return status;
   }
 
-  elements.messageHistory.appendChild(renderMessageItem(normalized));
-  elements.messageHistory.scrollTop = elements.messageHistory.scrollHeight;
+  status = document.createElement("div");
+  status.id = HISTORY_STATUS_ID;
+  status.className = "sticky top-0 z-10 hidden mb-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs text-gray-500";
+  elements.messageHistory.prepend(status);
+  return status;
 }
 
-export function renderMessageHistory(messages) {
-  elements.messageHistory.innerHTML = "";
+function setHistoryStatus(text, hidden = false) {
+  const status = getHistoryStatusElement();
+  status.textContent = text;
+  status.classList.toggle("hidden", hidden);
+}
 
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    const emptyState = document.createElement("div");
-    emptyState.dataset.emptyState = "true";
-    emptyState.className = "mb-2 text-gray-500";
-    emptyState.textContent = "Нет сообщений в этом чате";
-    elements.messageHistory.appendChild(emptyState);
+function clearEmptyState() {
+  const emptyState = elements.messageHistory.querySelector("[data-empty-state='true']");
+  if (emptyState) {
+    emptyState.remove();
+  }
+}
+
+function hasMessageNode(messageId) {
+  return elements.messageHistory.querySelector(`[data-message-id='${CSS.escape(String(messageId))}']`) !== null;
+}
+
+function renderEmptyState() {
+  clearEmptyState();
+  const emptyState = document.createElement("div");
+  emptyState.dataset.emptyState = "true";
+  emptyState.className = "mb-2 text-gray-500";
+  emptyState.textContent = "Нет сообщений в этом чате";
+  elements.messageHistory.appendChild(emptyState);
+}
+
+export function setHistoryLoading(isLoadingOlder) {
+  if (isLoadingOlder) {
+    setHistoryStatus("Загружаем более ранние сообщения...", false);
     return;
   }
 
+  setHistoryStatus("", true);
+}
+
+export function setInitialHistoryLoading(isLoading) {
+  if (isLoading) {
+    elements.messageHistory.innerHTML = "";
+    const loader = document.createElement("div");
+    loader.dataset.loadingState = "true";
+    loader.className = "mb-2 text-gray-500";
+    loader.textContent = "Загружаем историю сообщений...";
+    elements.messageHistory.appendChild(loader);
+    return;
+  }
+
+  const loader = elements.messageHistory.querySelector("[data-loading-state='true']");
+  if (loader) {
+    loader.remove();
+  }
+}
+
+export function setHistoryComplete(isComplete) {
+  if (isComplete) {
+    setHistoryStatus("Вся история загружена", false);
+    return;
+  }
+
+  setHistoryStatus("", true);
+}
+
+export function replaceMessageHistory(messages) {
+  elements.messageHistory.innerHTML = "";
+  setHistoryStatus("", true);
+
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    renderEmptyState();
+    return;
+  }
+
+  clearEmptyState();
   messages.forEach((message) => {
     elements.messageHistory.appendChild(renderMessageItem(message));
   });
   elements.messageHistory.scrollTop = elements.messageHistory.scrollHeight;
+}
+
+export function prependMessagesToHistory(messages) {
+  if (!messages || messages.length === 0) {
+    return;
+  }
+
+  clearEmptyState();
+  const previousScrollHeight = elements.messageHistory.scrollHeight;
+  const previousScrollTop = elements.messageHistory.scrollTop;
+
+  const fragment = document.createDocumentFragment();
+  messages.forEach((message) => {
+    const normalized = normalizeMessage(message);
+    if (hasMessageNode(normalized.id)) {
+      return;
+    }
+    fragment.appendChild(renderMessageItem(normalized));
+  });
+
+  const firstMessage = elements.messageHistory.querySelector("[data-message-id]");
+  if (firstMessage) {
+    elements.messageHistory.insertBefore(fragment, firstMessage);
+  } else {
+    elements.messageHistory.appendChild(fragment);
+  }
+
+  const newScrollHeight = elements.messageHistory.scrollHeight;
+  elements.messageHistory.scrollTop = previousScrollTop + (newScrollHeight - previousScrollHeight);
+}
+
+export function appendMessageToHistory(message, options = {}) {
+  const normalized = normalizeMessage(message);
+  if (hasMessageNode(normalized.id)) {
+    return;
+  }
+
+  clearEmptyState();
+  elements.messageHistory.appendChild(renderMessageItem(normalized));
+
+  if (options.stickToBottom !== false) {
+    elements.messageHistory.scrollTop = elements.messageHistory.scrollHeight;
+  }
 }

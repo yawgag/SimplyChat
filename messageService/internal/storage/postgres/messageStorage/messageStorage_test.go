@@ -1,6 +1,9 @@
 package messageStorage
 
-import "testing"
+import (
+	"messageService/internal/models"
+	"testing"
+)
 
 func TestAggregateHistoryRowsKeepsSingleMessageWithMultipleAttachments(t *testing.T) {
 	fileID1 := "file-1"
@@ -47,5 +50,19 @@ func TestAggregateHistoryRowsKeepsSingleMessageWithMultipleAttachments(t *testin
 	}
 	if len(history[0].Attachments) != 2 {
 		t.Fatalf("expected 2 attachments, got %d", len(history[0].Attachments))
+	}
+}
+
+func TestReverseHistory(t *testing.T) {
+	history := []models.EventSendMessagePayload{
+		{Id: 3},
+		{Id: 2},
+		{Id: 1},
+	}
+
+	reverseHistory(history)
+
+	if history[0].Id != 1 || history[1].Id != 2 || history[2].Id != 3 {
+		t.Fatalf("unexpected order after reverse: %+v", history)
 	}
 }

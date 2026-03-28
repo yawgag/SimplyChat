@@ -34,6 +34,9 @@ export async function connectWebSocket(handlers) {
           case "message_history":
             handlers.onMessageHistory?.(message.data);
             break;
+          case "message_history_error":
+            handlers.onMessageHistoryError?.(message.data);
+            break;
           case "add_user_to_chat":
             handlers.onAddUserToChat?.(message.data);
             break;
@@ -83,4 +86,13 @@ export function sendEvent(type, data) {
   const payload = { event_type: type, data };
   log(`📤 Отправлено: ${JSON.stringify(payload)}`);
   state.socket.send(JSON.stringify(payload));
+}
+
+export function requestMessageHistory({ login, chatId, limit, before = null }) {
+  sendEvent("get_message_history", {
+    login,
+    chat_id: chatId,
+    limit,
+    before,
+  });
 }
